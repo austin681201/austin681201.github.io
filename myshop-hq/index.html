@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>MyShop 總部</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>MyShop 總部</h1>
+    <p class="mono">// 一人營運 · 連線 myshop-prod</p>
+
+    <section id="gate" class="card">
+      <label for="pass">總部密碼</label>
+      <input id="pass" type="password" autocomplete="current-password" autofocus />
+      <div>
+        <button type="button" id="loginBtn">登入</button>
+      </div>
+      <p id="gateErr" class="err hidden"></p>
+    </section>
+
+    <section id="desk" class="hidden">
+      <div class="toolbar">
+        <input id="q" type="search" placeholder="店名、店碼、信箱、客人碼、品項" />
+        <button type="button" id="searchBtn">查詢</button>
+        <button type="button" class="ghost" id="reloadBtn">重新整理</button>
+        <button type="button" class="ghost" id="outBtn">登出</button>
+      </div>
+      <p id="deskErr" class="err hidden"></p>
+      <p id="walletNote" class="hint hidden"></p>
+      <p id="secretOnce" class="secret hidden"></p>
+      <div id="confirmBox" class="confirm-overlay hidden">
+        <div class="card confirm-panel">
+          <p id="confirmMsg"></p>
+          <div class="actions">
+            <button type="button" id="confirmOk">確定</button>
+            <button type="button" class="ghost" id="confirmNo">取消</button>
+          </div>
+        </div>
+      </div>
+      <div class="row" id="stats"></div>
+
+      <div id="homeView">
+        <nav class="tabs" id="tabs" aria-label="總部分頁">
+          <button type="button" class="tab on" data-page="accounts">帳戶</button>
+          <button type="button" class="tab" data-page="owners">店主</button>
+          <button type="button" class="tab" data-page="shops">店舖</button>
+        </nav>
+        <div id="pageAccounts" class="card page">
+          <p class="mono">// 帳戶</p>
+          <p class="hint">點一列開帳戶卡。客人面只列加入哪些店，不攤備註與訂單內文。</p>
+          <div id="users"></div>
+        </div>
+        <div id="pageOwners" class="card page hidden">
+          <p class="mono">// 店主</p>
+          <div id="owners"></div>
+        </div>
+        <div id="pageShops" class="card page hidden">
+          <p class="mono">// 店舖 · 開通與訂閱</p>
+          <div id="shops"></div>
+        </div>
+      </div>
+
+      <div id="accountView" class="hidden">
+        <p><button type="button" class="ghost" id="backHome1">← 返回</button></p>
+        <div class="card" id="accountCard"></div>
+      </div>
+
+      <div id="shopView" class="hidden">
+        <p><button type="button" class="ghost" id="backHome2">← 返回</button></p>
+        <div class="card" id="shopCard"></div>
+      </div>
+    </section>
+  </div>
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+</body>
+</html>

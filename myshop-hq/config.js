@@ -1,0 +1,1 @@
+window.HQ_CONFIG = {"url":"https://jsrgxjimhkbzdypiuisk.supabase.co","anonKey":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzcmd4amltaGtiemR5cGl1aXNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2Mjg4NjMsImV4cCI6MjEwMjIwNDg2M30.Kx-7bBLKAh6HiilcOxhoGqT7ENpICwA8UbXMLS1p4bA"};
