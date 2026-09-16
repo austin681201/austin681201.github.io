@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>MyShop 掃碼點餐</title>
+  <style>
+    :root {
+      --bg: #F5F0E6;
+      --paper: #FFFCF7;
+      --ink: #5C4018;
+      --muted: #8A7355;
+      --line: #D8CFC0;
+      --cream: #5C4018;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
+    }
+    .wrap { max-width: 28rem; margin: 0 auto; padding: 20px 16px 48px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .table { font-weight: 800; font-size: 18px; margin: 0 0 16px; }
+    .muted { color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .warn { color: #9a3412; font-size: 15px; }
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      margin: 0 0 10px;
+    }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .name { font-weight: 700; font-size: 16px; }
+    .price { font-weight: 800; }
+    .qty { display: flex; align-items: center; gap: 8px; }
+    .qty b { min-width: 1.2em; text-align: center; }
+    button {
+      border: 0;
+      background: var(--cream);
+      color: var(--bg);
+      font-weight: 800;
+      font-size: 16px;
+      padding: 12px 16px;
+      width: 100%;
+    }
+    button:disabled { opacity: 0.45; }
+    .ghost {
+      background: var(--paper);
+      color: var(--cream);
+      border: 1px solid var(--cream);
+      width: auto;
+      padding: 4px 10px;
+      font-size: 18px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 64px;
+      margin: 12px 0;
+      padding: 10px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      color: var(--ink);
+      font: inherit;
+    }
+    .ok { font-size: 18px; font-weight: 800; margin: 12px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app">載入中…</div>
+  <script src="myshop-hq/config.js"></script>
+  <script>
+    const cfg = window.HQ_CONFIG || {};
+    const params = new URLSearchParams(location.search);
+    const shopId = params.get("s") || "";
+    const tableNo = params.get("no") || "";
+    const qrKey = params.get("k") || "";
+    const app = document.getElementById("app");
+    const cart = {};
+
+    function caption(no) {
+      const n = String(no || "").trim();
+      if (!n) return "";
+      return n.startsWith("桌") ? n : "桌 " + n;
+    }
+
+    async function rpc(name, body) {
+      const res = await fetch(cfg.url + "/rest/v1/rpc/" + name, {
+        method: "POST",
+        headers: {
+          apikey: cfg.anonKey,
+          Authorization: "Bearer " + cfg.anonKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error((data && data.message) || "cloud");
+      return data;
+    }
+
+    function renderError(msg) {
+      app.innerHTML = "<h1>掃碼點餐</h1><p class='warn'>" + msg + "</p>";
+    }
+
+    function money(sym, n) {
+      if (n == null) return "現場報價";
+      return sym + n;
+    }
+
+    function renderMenu(data) {
+      const items = data.items || [];
+      const cap = caption(data.table_no);
+      const sym = data.currency_symbol || "NT$";
+      const lines = items.map((it) => {
+        const q = cart[it.id] || 0;
+        return (
+          "<div class='card'><div class='row'><div><div class='name'>" +
+          it.name +
+          "</div><div class='muted'>" +
+          money(sym, it.needs_quote ? null : it.price) +
+          (it.unit ? "／" + it.unit : "") +
+          "</div></div><div class='qty'><button class='ghost' data-del='" +
+          it.id +
+          "'>−</button><b>" +
+          q +
+          "</b><button class='ghost' data-add='" +
+          it.id +
+          "'>＋</button></div></div></div>"
+        );
+      }).join("");
+      const count = Object.values(cart).reduce((n, q) => n + q, 0);
+      app.innerHTML =
+        "<h1>" +
+        (data.name || "本店") +
+        "</h1><p class='table'>" +
+        cap +
+        "</p>" +
+        (items.length ? lines : "<p class='muted'>店家尚未上架商品。</p>") +
+        "<textarea id='note' placeholder='備註（少冰、分開包裝）'></textarea>" +
+        "<button id='send'" +
+        (count ? "" : " disabled") +
+        ">送出訂單" +
+        (count ? "（" + count + "）" : "") +
+        "</button>" +
+        "<p class='muted' style='margin-top:16px'>點完會進店家帳簿。之後若要看自己的紀錄，請下載 MyShop。</p>";
+      const noteEl = document.getElementById("note");
+      app.querySelectorAll("[data-add]").forEach((btn) => {
+        btn.onclick = () => {
+          const id = btn.getAttribute("data-add");
+          cart[id] = (cart[id] || 0) + 1;
+          renderMenu(data);
+        };
+      });
+      app.querySelectorAll("[data-del]").forEach((btn) => {
+        btn.onclick = () => {
+          const id = btn.getAttribute("data-del");
+          cart[id] = Math.max(0, (cart[id] || 0) - 1);
+          if (!cart[id]) delete cart[id];
+          renderMenu(data);
+        };
+      });
+      const send = document.getElementById("send");
+      send.onclick = async () => {
+        const lines = Object.entries(cart)
+          .filter(([, q]) => q > 0)
+          .map(([id, qty]) => ({ id, qty }));
+        if (!lines.length) return;
+        send.disabled = true;
+        send.textContent = "送出中…";
+        try {
+          const placed = await rpc("table_qr_place", {
+            p_shop_id: shopId,
+            p_table_no: tableNo,
+            p_qr_key: qrKey,
+            p_lines: lines,
+            p_note: noteEl.value || null,
+          });
+          if (!placed || !placed.ok) {
+            renderError("這張桌碼已失效，請請店員重新列印。");
+            return;
+          }
+          app.innerHTML =
+            "<h1>" +
+            (data.name || "本店") +
+            "</h1><p class='ok'>已送出訂單</p><p class='table'>" +
+            (placed.caption || cap) +
+            "</p><p>" +
+            (placed.item_name || "") +
+            "</p><p class='muted'>店家帳簿已收到這一筆。</p>";
+        } catch (e) {
+          send.disabled = false;
+          send.textContent = "送出訂單";
+          renderError("送出失敗，請再試一次。");
+        }
+      };
+    }
+
+    (async () => {
+      if (!cfg.url || !cfg.anonKey) {
+        renderError("點餐頁尚未設定雲端。");
+        return;
+      }
+      if (!shopId || !tableNo) {
+        renderError("請掃桌上的 QR。");
+        return;
+      }
+      try {
+        const data = await rpc("table_qr_open", {
+          p_shop_id: shopId,
+          p_table_no: tableNo,
+          p_qr_key: qrKey,
+        });
+        if (!data || !data.ok) {
+          const reason = data && data.reason;
+          renderError(
+            reason === "paused"
+              ? "本店暫停接單。"
+              : "這張桌碼無效或已重新生成。"
+          );
+          return;
+        }
+        renderMenu(data);
+      } catch (e) {
+        renderError("連不上點餐，請稍後再掃一次。");
+      }
+    })();
+  </script>
+</body>
+</html>
