@@ -138,6 +138,7 @@ select {
   margin: 0 4px 4px 0;
 }
 .tag.warn { border-color: var(--danger); color: var(--danger); }
+.st-ban { color: var(--danger); }
 .confirm-overlay {
   position: fixed;
   inset: 0;

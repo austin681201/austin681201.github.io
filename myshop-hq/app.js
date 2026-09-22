@@ -17,7 +17,7 @@ const GRANT_MODULES = [
   ['nav', '地圖導航'],
   ['mileage', '里程計算'],
   ['rental_mgmt', '租賃管理'],
-  ['laundry', '個人洗衣'],
+  ['laundry', '送修送洗'],
   ['menu_photo', '價目附圖'],
 ];
 
@@ -46,11 +46,12 @@ function errBox(id, msg) {
     not_found: '找不到這筆',
     bad_days: '天數只能是 7／30／90',
     banned: '此帳戶已停權',
-    bad_amount: '點數請填 1～5000',
+    bad_amount: '點數請填 1～100000',
+    ban_failed: '停權沒寫進去。請在 Supabase SQL Editor 跑 patch-hq-ban-fix.sql 後再按一次',
   };
   let text = map[msg] || msg;
-  if (/hq_grant_points|mb_balance|schema cache/i.test(String(msg))) {
-    text = '雲端還沒有正式錢包函式。請在 Supabase SQL Editor 跑 patch-hq-mb-wallet.sql';
+  if (/hq_grant_points|mb_balance|mb_ledger|schema cache/i.test(String(msg))) {
+    text = '雲端還沒有錢包／流水函式。請在 Supabase SQL Editor 跑 patch-hq-mb-wallet.sql，再跑 patch-mb-ledger-and-self-alias.sql';
   }
   el.textContent = text;
   el.scrollIntoView({ block: 'nearest' });
@@ -207,6 +208,12 @@ function showHome() {
   showPage(currentPage);
 }
 
+function rowBanned(u) {
+  if (!u) return false;
+  if (u.banned === true || u.banned === 't' || u.banned === 'true' || u.banned === 1) return true;
+  return Boolean(u.banned_at);
+}
+
 function renderOverview(data) {
   const stats = [
     ['帳號', data.users],
@@ -239,7 +246,7 @@ function renderOverview(data) {
       esc(o.guest_code),
       o.shop_count,
       esc(o.shop_names),
-      o.banned ? '<span class="tag warn">停權</span>' : '正常',
+      rowBanned(o) ? '<span class="st-ban">停權</span>' : '正常',
     ],
     (o) => `class="clickable" data-open="account" data-id="${esc(o.id)}"`,
   );
@@ -269,7 +276,7 @@ function renderOverview(data) {
       esc(u.guest_code),
       esc(u.email),
       u.is_owner ? '店主' : '客人',
-      u.banned ? '<span class="tag warn">停權</span>' : '正常',
+      rowBanned(u) ? '<span class="st-ban">停權</span>' : '正常',
     ],
     (u) => `class="clickable" data-open="account" data-id="${esc(u.id)}"`,
   );
@@ -290,6 +297,28 @@ function eventsTable(rows) {
       esc(e.source),
       esc(e.detail || (e.days ? `${e.days} 天` : '')),
     ],
+  );
+}
+
+function mbKindLabel(kind) {
+  if (kind === 'grant') return '總部贈點';
+  if (kind === 'iap') return '購買點包';
+  if (kind === 'spend') return '開通／扣點';
+  return kind || '—';
+}
+
+function mbLedgerTable(rows) {
+  if (!rows?.length) {
+    return '<p class="hint">尚無流水。跑完 SQL 後，贈點與之後的扣點會列在這裡；補跑前的消費無法回溯。</p>';
+  }
+  return table(
+    ['時間', '類型', '數量', '說明'],
+    rows,
+    (r) => {
+      const n = Number(r.amount);
+      const signed = Number.isFinite(n) ? (n > 0 ? `+${n}` : String(n)) : '—';
+      return [fmtTime(r.created_at), esc(mbKindLabel(r.kind)), esc(signed), esc(r.detail || '')];
+    },
   );
 }
 
@@ -328,15 +357,17 @@ async function openAccount(id) {
         <b>信箱</b><span>${esc(u.email)}</span>
         <b>客人碼</b><span>${esc(u.guest_code)}</span>
         <b>註冊</b><span>${fmtTime(u.created_at)}</span>
-        <b>狀態</b><span>${u.banned ? '<span class="tag warn">停權</span>' : '正常'}</span>
-        <b>M幣</b><span>餘額 ${esc(u.mb_balance ?? 0)} · 待領 ${esc(u.mb_pending ?? 0)} · 累計已贈 ${esc(u.mb_granted_total ?? 0)}</span>
+        <b>狀態</b><span>${u.banned ? '<span class="st-ban">停權</span>' : '正常'}</span>
+        <b>M幣</b><span><img src="mb-coin.png" alt="" width="16" height="16" style="vertical-align:-3px;margin-right:4px">餘額 ${esc(u.mb_balance ?? 0)} · 待領 ${esc(u.mb_pending ?? 0)} · 累計已贈 ${esc(u.mb_granted_total ?? 0)}</span>
       </div>
       <p class="mono" style="margin-top:18px">// 贈點（App 開著會跳窗；背景會推播）</p>
       <div class="actions">
-        <input id="grantPts" type="number" min="1" max="5000" value="100" />
+        <input id="grantPts" type="number" min="1" max="100000" value="100" />
         <button type="button" data-act="grant-points" data-id="${esc(u.id)}">贈 M幣</button>
       </div>
       <p id="grantPtsMsg" class="hint"></p>
+      <p class="mono" style="margin-top:18px">// M幣流水</p>
+      ${mbLedgerTable(data.mb_ledger)}
       <p class="mono" style="margin-top:18px">// 店主面</p>
       ${owned}
       <p class="mono">// 客人面（加入哪些店）</p>
@@ -351,6 +382,7 @@ async function openAccount(id) {
         <button type="button" class="ghost" data-act="reset-secret" data-id="${esc(u.id)}">重設秘密碼</button>
         <button type="button" class="${u.banned ? 'ghost' : 'danger'}" data-act="ban" data-id="${esc(u.id)}" data-on="${u.banned ? '0' : '1'}">${u.banned ? '解除停權' : '停權整戶'}</button>
       </div>
+      <p id="accountActMsg" class="err hidden"></p>
     `;
     show($('homeView'), false);
     show($('shopView'), false);
@@ -514,8 +546,8 @@ $('outBtn').addEventListener('click', () => {
   show($('gate'), true);
   $('pass').focus();
 });
-$('backHome1').addEventListener('click', () => showHome());
-$('backHome2').addEventListener('click', () => showHome());
+$('backHome1').addEventListener('click', () => void bootDesk());
+$('backHome2').addEventListener('click', () => void bootDesk());
 
 document.addEventListener('click', (e) => {
   const t = e.target instanceof Element ? e.target.closest('[data-open],[data-act]') : null;
@@ -561,9 +593,28 @@ document.addEventListener('click', (e) => {
       } else if (act === 'ban') {
         const on = t.getAttribute('data-on') === '1';
         const uid = t.getAttribute('data-id');
-        const data = await rpc('hq_set_banned', { p_token: token(), p_user_id: uid, p_banned: on });
-        if (!data?.ok) throw new Error(data?.error || '失敗');
+        const go = await askConfirm(
+          on
+            ? '停權後對方不能登入，名下店也不能新接單。確定停權這一整戶？'
+            : '確定解除這戶的停權？',
+        );
+        if (!go) return;
+        let data;
+        try {
+          data = await rpc('hq_set_banned', { p_token: token(), p_user_id: uid, p_banned: on });
+        } catch (rpcErr) {
+          const raw = String(rpcErr?.message || rpcErr || '');
+          if (/permission denied|auth\.sessions|refresh_tokens|schema cache|hq_set_banned/i.test(raw)) {
+            throw new Error('ban_failed');
+          }
+          throw rpcErr;
+        }
+        if (!data?.ok) throw new Error(data?.error || 'ban_failed');
         await openAccount(uid);
+        const after = await rpc('hq_account', { p_token: token(), p_user_id: uid });
+        if (after?.ok && Boolean(after.user?.banned) !== on) {
+          throw new Error('ban_failed');
+        }
       } else if (act === 'reissue') {
         const uid = t.getAttribute('data-id');
         const data = await rpc('hq_reissue_guest_code', { p_token: token(), p_user_id: uid });
@@ -593,7 +644,7 @@ document.addEventListener('click', (e) => {
         const n = Math.floor(Number($('grantPts')?.value || 0));
         const grantMsg = $('grantPtsMsg');
         if (grantMsg) grantMsg.textContent = '';
-        if (!Number.isFinite(n) || n < 1 || n > 5000) {
+        if (!Number.isFinite(n) || n < 1 || n > 100000) {
           throw new Error('bad_amount');
         }
         const go = await askConfirm(`贈 ${n} M幣給此帳戶？會立刻加進雲端餘額；對方 App 開著會跳出入帳訊息，在背景則推播。`);
@@ -650,6 +701,7 @@ document.addEventListener('click', (e) => {
       }
     } catch (err) {
       errBox('deskErr', err.message || '操作失敗');
+      if ($('accountActMsg')) errBox('accountActMsg', err.message || '操作失敗');
     }
   })();
 });
